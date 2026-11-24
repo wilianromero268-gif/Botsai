@@ -1,13 +1,13 @@
 [phases.setup]
 nixPkgs = [
-  "nodejs_22",
+  "nodejs_24",
   "ffmpeg",
   "yt-dlp"
 ]
 
 [phases.install]
 cmds = [
-  "npm install --ignore-scripts"
+  "npm ci --omit=dev --include=optional"
 ]
 
 [start]

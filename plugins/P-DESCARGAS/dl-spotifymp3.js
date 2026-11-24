@@ -1,65 +1,57 @@
+
 import axios from 'axios'
 import config from '../../config.js'
 
-
 // ═══════════════════════════════════════
-// ✰ SAITAMABOT • SPOTIFY MP3
+// ✰ SAITAMABOT • JAKY SPOTIFY
 // ═══════════════════════════════════════
 
-const STELLAR_API =
-  'https://api.stellarwa.xyz'
+const JAKY_API =
+  'https://api.jaky.dev/v1/download/spotify'
 
-
-const STELLAR_KEY =
-  'proyectsV2'
-
+const JAKY_KEY =
+  'jK74D63CCF'
 
 const BOT_NAME =
   config.botName ||
   '𝚂𝙰𝙸𝚃𝙰𝙼𝙰𝙱𝙾𝚃'
-
 
 // ═══════════════════════════════════════
 // ✰ LIMPIAR NOMBRE
 // ═══════════════════════════════════════
 
 function cleanFileName(name) {
-
-  return String(
-    name || 'Spotify Music'
-  )
-    .replace(
-      /[<>:"/\\|?*\x00-\x1F]/g,
-      ''
-    )
-    .replace(
-      /\s+/g,
-      ' '
-    )
+  return String(name || 'Spotify Music')
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
+    .replace(/\s+/g, ' ')
     .trim()
-    .slice(
-      0,
-      150
-    )
-
+    .slice(0, 150)
 }
-
 
 // ═══════════════════════════════════════
 // ✰ VALIDAR SPOTIFY
 // ═══════════════════════════════════════
 
 function isSpotifyTrack(url) {
-
   return /^https?:\/\/open\.spotify\.com\/track\/[a-zA-Z0-9]+/i
-    .test(
-      String(
-        url || ''
-      ).trim()
-    )
-
+    .test(String(url || '').trim())
 }
 
+// ═══════════════════════════════════════
+// ✰ REACCIONES
+// ═══════════════════════════════════════
+
+async function react(conn, m, emoji) {
+  return conn.sendMessage(
+    m.chat,
+    {
+      react: {
+        text: emoji,
+        key: m.key
+      }
+    }
+  ).catch(() => {})
+}
 
 // ═══════════════════════════════════════
 // ✰ HANDLER
@@ -74,450 +66,207 @@ const handler = async (
     command
   }
 ) => {
-
   try {
-
-    const url =
-      String(
-        text || ''
-      ).trim()
-
-
-    // ═════════════════════════════════
-    // ✰ SIN URL
-    // ═════════════════════════════════
+    const url = String(text || '').trim()
 
     if (!url) {
-
-      await conn.sendMessage(
-        m.chat,
-        {
-          react: {
-            text: '❌',
-            key: m.key
-          }
-        }
-      ).catch(() => {})
-
+      await react(conn, m, '❌')
 
       return m.reply(
-
 `༺ 𝚂𝙿𝙾𝚃𝙸𝙵𝚈 𝙼𝙿𝟹 ༻
 
-✰ 𝙴𝚗𝚟í𝚊 𝚎𝚕 𝚎𝚗𝚕𝚊𝚌𝚎 𝚍𝚎 𝚞𝚗𝚊 𝚌𝚊𝚗𝚌𝚒ó𝚗 𝚍𝚎 𝚂𝚙𝚘𝚝𝚒𝚏𝚢.
+✰ Envía el enlace de una canción de Spotify.
 
-✰ 𝚄𝚜𝚊:
+✰ Uso:
 ${usedPrefix}${command} <url>
 
-✰ 𝙴𝚓𝚎𝚖𝚙𝚕𝚘:
-${usedPrefix}${command} https://open.spotify.com/track/09mEdoA6zrmBPgTEN5qXmN
+✰ Ejemplo:
+${usedPrefix}${command} https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT
 
 ✰ ${BOT_NAME}`
-
       )
-
     }
 
-
-    // ═════════════════════════════════
-    // ✰ URL INVÁLIDA
-    // ═════════════════════════════════
-
-    if (
-      !isSpotifyTrack(url)
-    ) {
-
-      await conn.sendMessage(
-        m.chat,
-        {
-          react: {
-            text: '❌',
-            key: m.key
-          }
-        }
-      ).catch(() => {})
-
+    if (!isSpotifyTrack(url)) {
+      await react(conn, m, '❌')
 
       return m.reply(
+`༺ 𝙴𝚁𝚁𝙾𝚁 𝚂𝙿𝙾𝚃𝙸𝙵𝚈 ༻
 
-`༺ 𝚂𝙿𝙾𝚃𝙸𝙵𝚈 ༻
-
-✰ 𝙻𝚊 𝚄𝚁𝙻 𝚗𝚘 𝚎𝚜 𝚟á𝚕𝚒𝚍𝚊.
-
-✰ 𝙳𝚎𝚋𝚎𝚜 𝚎𝚗𝚟𝚒𝚊𝚛 𝚞𝚗𝚊 𝚄𝚁𝙻 𝚍𝚎 𝚞𝚗𝚊 𝚌𝚊𝚗𝚌𝚒ó𝚗:
-
-https://open.spotify.com/track/...
+✰ URL inválida.
+✰ Debes enviar un enlace de una canción de Spotify.
 
 ✰ ${BOT_NAME}`
-
       )
-
     }
 
+    await react(conn, m, '🎵')
 
     // ═════════════════════════════════
-    // ✰ REACCIÓN PROCESANDO
+    // ✰ CONSULTAR JAKY API
     // ═════════════════════════════════
 
-    await conn.sendMessage(
-      m.chat,
+    if (!JAKY_KEY || JAKY_KEY === 'TU_NUEVA_API_KEY') {
+      throw new Error('Configura tu API Key de Jaky.')
+    }
+
+    const response = await axios.get(
+      JAKY_API,
       {
-        react: {
-          text: '🎵',
-          key: m.key
-        }
+        params: { url },
+        headers: {
+          'x-jaky-key': JAKY_KEY
+        },
+        timeout: 120000,
+        validateStatus: status =>
+          status >= 200 && status < 500
       }
-    ).catch(() => {})
+    )
 
+    const data = response?.data
 
-    // ═════════════════════════════════
-    // ✰ SOLICITAR STELLARWA
-    // ═════════════════════════════════
-
-    const response =
-      await axios.get(
-
-        `${STELLAR_API}/dl/spotify`,
-
-        {
-
-          params: {
-
-            url,
-
-            key:
-              STELLAR_KEY
-
-          },
-
-          timeout:
-            120000,
-
-          validateStatus:
-            status =>
-              status >= 200 &&
-              status < 500
-
-        }
-
-      )
-
-
-    const data =
-      response?.data
-
-
-    // ═════════════════════════════════
-    // ✰ VALIDAR RESPUESTA
-    // ═════════════════════════════════
-
-    if (!data) {
-
+    if (!data || data.status !== true) {
       throw new Error(
-        '𝙽𝚘 𝚜𝚎 𝚛𝚎𝚌𝚒𝚋𝚒ó 𝚛𝚎𝚜𝚙𝚞𝚎𝚜𝚝𝚊 𝚍𝚎 𝚂𝚝𝚎𝚕𝚕𝚊𝚛𝚆𝙰.'
+        data?.message ||
+        data?.msg ||
+        'Jaky API no pudo procesar la canción.'
       )
-
     }
 
+    const song = data.result
 
-    if (
-      data.status === false
-    ) {
-
-      throw new Error(
-
-        data.message ||
-        data.msg ||
-        '𝚂𝚝𝚎𝚕𝚕𝚊𝚛𝚆𝙰 𝚛𝚎𝚌𝚑𝚊𝚣ó 𝚕𝚊 𝚜𝚘𝚕𝚒𝚌𝚒𝚝𝚞𝚍.'
-
-      )
-
+    if (!song || !song.id) {
+      throw new Error('Respuesta de Jaky incompleta.')
     }
 
-
     // ═════════════════════════════════
-    // ✰ INFORMACIÓN
+    // ✰ METADATOS
     // ═════════════════════════════════
-
-    const song =
-      data.data ||
-      data.result ||
-      {}
-
-
-    const audioUrl =
-      song.dl ||
-      song.mp3 ||
-      song.download ||
-      song.url
-
-
-    if (!audioUrl) {
-
-      throw new Error(
-        '𝙽𝚘 𝚜𝚎 𝚎𝚗𝚌𝚘𝚗𝚝𝚛ó 𝚎𝚕 𝚎𝚗𝚕𝚊𝚌𝚎 𝚍𝚎𝚕 𝙼𝙿𝟹.'
-      )
-
-    }
-
 
     const title =
-      song.title ||
-      song.name ||
-      '𝚂𝚙𝚘𝚝𝚒𝚏𝚢 𝙼𝚞𝚜𝚒𝚌'
-
+      song.name || 'Spotify Music'
 
     const artist =
-      song.artist ||
-      song.artists ||
-      '𝙳𝚎𝚜𝚌𝚘𝚗𝚘𝚌𝚒𝚍𝚘'
-
+      Array.isArray(song.artists)
+        ? song.artists.join(', ')
+        : String(song.artists || 'Desconocido')
 
     const album =
-      song.album ||
-      '𝙳𝚎𝚜𝚌𝚘𝚗𝚘𝚌𝚒𝚍𝚘'
-
+      song.album?.name || 'Desconocido'
 
     const duration =
-      song.duration ||
-      '𝙳𝚎𝚜𝚌𝚘𝚗𝚘𝚌𝚒𝚍𝚊'
-
+      song.durationFormatted || 'Desconocida'
 
     const year =
-      song.year ||
-      song.publish ||
-      '𝙳𝚎𝚜𝚌𝚘𝚗𝚘𝚌𝚒𝚍𝚘'
-
+      song.album?.year || 'Desconocido'
 
     const cover =
-      song.cover ||
-      song.image ||
-      song.thumbnail ||
+      song.coverUrl ||
+      song.album?.coverUrl ||
       null
 
-
-    // ═════════════════════════════════
-    // ✰ NOMBRE DEL ARCHIVO
-    // ═════════════════════════════════
+    const plays =
+      song.playcountFormatted || 'Desconocidas'
 
     const fileName =
       `${cleanFileName(title)} - ${cleanFileName(artist)}.mp3`
 
-
     // ═════════════════════════════════
-    // ✰ DESCARGAR MP3
+    // ✰ INFORMACIÓN DE LA CANCIÓN
     // ═════════════════════════════════
 
-    const audioResponse =
-      await axios.get(
+    const caption =
+`༺ 𝚂𝙿𝙾𝚃𝙸𝙵𝚈 𝙸𝙽𝙵𝙾 ༻
 
-        audioUrl,
+✰ Título: ${title}
+✰ Artista: ${artist}
+✰ Álbum: ${album}
+✰ Duración: ${duration}
+✰ Año: ${year}
+✰ Reproducciones: ${plays}
 
+✰ Archivo: ${fileName}
+
+✰ ${BOT_NAME}`
+
+    if (cover) {
+      const imageResponse = await axios.get(
+        cover,
         {
-
-          responseType:
-            'arraybuffer',
-
-          timeout:
-            180000,
-
-          maxContentLength:
-            Infinity,
-
-          maxBodyLength:
-            Infinity
-
+          responseType: 'arraybuffer',
+          timeout: 30000
         }
-
       )
 
-
-    const audioBuffer =
-      Buffer.from(
-        audioResponse.data
+      const imageBuffer = Buffer.from(
+        imageResponse.data
       )
 
-
-    if (
-      !audioBuffer.length
-    ) {
-
-      throw new Error(
-        '𝙴𝚕 𝚊𝚛𝚌𝚑𝚒𝚟𝚘 𝙼𝙿𝟹 𝚎𝚜𝚝á 𝚟𝚊𝚌í𝚘.'
-      )
-
+      if (imageBuffer.length) {
+        await conn.sendMessage(
+          m.chat,
+          {
+            image: imageBuffer,
+            caption
+          },
+          { quoted: m }
+        )
+      } else {
+        await m.reply(caption)
+      }
+    } else {
+      await m.reply(caption)
     }
 
-
-    // ═════════════════════════════════
-    // ✰ ENVIAR AUDIO
-    // ═════════════════════════════════
-
-    const audioMessage = {
-
-      audio:
-        audioBuffer,
-
-      mimetype:
-        'audio/mpeg',
-
-      fileName,
-
-      ptt:
-        false,
-
-      contextInfo:
-
-        cover
-
-          ? {
-
-              externalAdReply: {
-
-                title:
-                  title,
-
-                body:
-                  artist,
-
-                thumbnailUrl:
-                  cover,
-
-                mediaType:
-                  1,
-
-                renderLargerThumbnail:
-                  true,
-
-                sourceUrl:
-                  url
-
-              }
-
-            }
-
-          : undefined
-
-    }
-
-
-    await conn.sendMessage(
-
-      m.chat,
-
-      audioMessage,
-
-      {
-
-        quoted:
-          m
-
-      }
-
-    )
-
-
-    // ═════════════════════════════════
-    // ✰ REACCIÓN FINAL
-    // ═════════════════════════════════
-
-    await conn.sendMessage(
-      m.chat,
-      {
-        react: {
-          text:
-            '✅',
-          key:
-            m.key
-        }
-      }
-    ).catch(() => {})
-
+    await react(conn, m, '✅')
 
   } catch (error) {
-
     console.error(
-      '[STELLAR SPOTIFY MP3]',
+      '[JAKY SPOTIFY]',
       error?.response?.data ||
       error?.message ||
       error
     )
 
-
-    // ═════════════════════════════════
-    // ✰ REACCIÓN ERROR
-    // ═════════════════════════════════
-
-    await conn.sendMessage(
-      m.chat,
-      {
-        react: {
-          text:
-            '❌',
-          key:
-            m.key
-        }
-      }
-    ).catch(() => {})
-
+    await react(conn, m, '❌')
 
     const details =
       error?.response?.data?.message ||
       error?.response?.data?.msg ||
       error?.message ||
-      '𝙴𝚛𝚛𝚘𝚛 𝚍𝚎𝚜𝚌𝚘𝚗𝚘𝚌𝚒𝚍𝚘.'
-
-
-    // ═════════════════════════════════
-    // ✰ MENSAJE DE ERROR
-    // ═════════════════════════════════
+      'Error desconocido.'
 
     return m.reply(
+`༺ 𝙴𝚁𝚁𝙾𝚁 𝚂𝙿𝙾𝚃𝙸𝙵𝚈 ༻
 
-`༺ 𝙴𝚁𝚁𝙾𝚁 𝚂𝙿𝙾𝚃𝙸𝙵𝚈 𝙼𝙿𝟹 ༻
+✰ No se pudo consultar la canción.
 
-✰ 𝙽𝚘 𝚜𝚎 𝚙𝚞𝚍𝚘 𝚍𝚎𝚜𝚌𝚊𝚛𝚐𝚊𝚛 𝚎𝚕 𝚊𝚞𝚍𝚒𝚘.
-
-✰ 𝙳𝚎𝚝𝚊𝚕𝚕𝚎𝚜:
+✰ Detalles:
 ${String(details).slice(0, 350)}
 
 ✰ ${BOT_NAME}`
-
     )
-
   }
-
 }
-
 
 // ═══════════════════════════════════════
 // ✰ CONFIGURACIÓN
 // ═══════════════════════════════════════
 
 handler.help = [
-
   'spotifymp3 <url>'
-
 ]
-
 
 handler.tags = [
-
   'descargas'
-
 ]
-
 
 handler.command = [
-
   'spotifymp3',
-
   'spmp3'
-
 ]
-
 
 handler.register = false
 
-
 export default handler
+

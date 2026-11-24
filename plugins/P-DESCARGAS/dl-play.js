@@ -1,608 +1,334 @@
 import axios from 'axios'
 import ytsearch from 'yt-search'
 import config from '../../config.js'
-
-
-// ═══════════════════════════════════════
-// ✰ SAITAMABOT • YOUTUBE SEARCH
-// ═══════════════════════════════════════
-
-global.youtubeCache =
-  global.youtubeCache || {}
-
-
-const LUXINFINITY =
-  'https://luxinfinity.vercel.app/api/search/youtube'
-
-
-const BOT_NAME =
-  config.botName ||
-  '𝑺𝒂𝒊𝒕𝒂𝒎𝒂𝑩𝒐𝒕'
-
+import {
+  generateWAMessageFromContent,
+  prepareWAMessageMedia
+} from '@whiskeysockets/baileys'
 
 // ═══════════════════════════════════════
-// ✰ HANDLER
+// ✰ SAITAMABOT • YOUTUBE PLAY
 // ═══════════════════════════════════════
 
-const handler = async (
-  m,
-  {
-    conn,
-    text,
-    usedPrefix,
-    command
-  }
-) => {
+global.youtubeCache = global.youtubeCache || {}
 
+const LUXINFINITY = 'https://luxinfinity.vercel.app/api/search/youtube'
+const BOT_NAME = config.botName || '𝑺𝒂𝒊𝒕𝒂𝒎𝒂𝑩𝒐𝒕'
+const FRAME = '*༺═────── ✰ ──────═༻*'
+
+const clean = (value, fallback = 'Desconocido') => {
+  if (value === null || value === undefined || value === '') return fallback
+  return String(value).replace(/[\u0000-\u001F]/g, ' ').trim() || fallback
+}
+
+const getThumbnail = video =>
+  video.thumbnail ||
+  `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`
+
+// ═══════════════════════════════════════
+// ✰ HANDLER PRINCIPAL
+// ═══════════════════════════════════════
+
+const handler = async (m, { conn, text, usedPrefix, command }) => {
   try {
+    if (command === 'playnext') {
+      const saved = global.youtubeCache[m.sender]
 
-    // ═════════════════════════════════
-    // ✰ SIGUIENTE RESULTADO
-    // ═════════════════════════════════
-
-    if (
-      command === 'playnext'
-    ) {
-
-      const dataUser =
-        global.youtubeCache[
-          m.sender
-        ]
-
-
-      if (
-        !dataUser ||
-        !dataUser.results?.length
-      ) {
-
+      if (!saved?.results?.length) {
         return m.reply(
+`${FRAME}
+*༺ 𝚂𝙸𝙽 𝙱Ú𝚂𝚀𝚄𝙴𝙳𝙰 ༻*
 
-`༺ 𝚂𝙸𝙽 𝙱Ú𝚂𝚀𝚄𝙴𝙳𝙰 ༻
+✰ No hay resultados guardados.
+✰ Usa: ${usedPrefix}play <texto>
 
-✰ 𝙽𝚘 𝚑𝚊𝚢 𝚋ú𝚜𝚚𝚞𝚎𝚍𝚊.
-
-✰ 𝚄𝚜𝚊:
-${usedPrefix}play <texto>
-
-✰ ${BOT_NAME}`
+${BOT_NAME}`
         )
       }
 
-
-      dataUser.index++
-
-
-      if (
-        dataUser.index >=
-        dataUser.results.length
-      ) {
-
-        dataUser.index = 0
-      }
-
+      saved.index = (saved.index + 1) % saved.results.length
 
       return sendYoutubeCard(
         conn,
         m,
-        dataUser.results,
-        dataUser.index,
-        usedPrefix
+        saved.results,
+        saved.index
       )
     }
 
-
-    // ═════════════════════════════════
-    // ✰ SIN TEXTO
-    // ═════════════════════════════════
-
-    if (
-      !text?.trim()
-    ) {
-
+    if (!text?.trim()) {
       return m.reply(
+`${FRAME}
+*༺ 𝚈𝙾𝚄𝚃𝚄𝙱𝙴 𝙿𝙻𝙰𝚈 ༻*
 
-`༺ 𝚈𝙾𝚄𝚃𝚄𝙱𝙴 ༻
+✰ Uso: ${usedPrefix}${command} <texto>
+✰ Ejemplo: ${usedPrefix}play Twice
 
-✰ 𝚄𝚜𝚊:
-${usedPrefix}${command} <texto>
-
-✰ 𝙴𝚓𝚎𝚖𝚙𝚕𝚘:
-${usedPrefix}${command} Twice
-
-✰ ${BOT_NAME}`
+${BOT_NAME}`
       )
     }
 
+    const query = text.trim()
 
-    const query =
-      text.trim()
+    await conn.sendMessage(m.chat, {
+      react: { text: '⏳', key: m.key }
+    }).catch(() => {})
 
+    const searchMsg = await m.reply(
+`${FRAME}
+*༺ 𝙱𝚄𝚂𝙲𝙰𝙽𝙳𝙾 𝙴𝙽 𝚈𝙾𝚄𝚃𝚄𝙱𝙴 ༻*
 
-    // ═════════════════════════════════
-    // ✰ REACCIÓN
-    // ═════════════════════════════════
+✰ Consulta: ${query}
 
-    await conn.sendMessage(
-      m.chat,
-      {
-        react: {
-          text: '⏳',
-          key: m.key
-        }
-      }
-    ).catch(() => {})
-
-
-    // ═════════════════════════════════
-    // ✰ BUSCANDO
-    // ═════════════════════════════════
-
-    const searchMsg =
-      await m.reply(
-
-`༺ 𝙱𝚄𝚂𝙲𝙰𝙽𝙳𝙾 ༻
-
-✰ 𝙱𝚞𝚜𝚌𝚊𝚗𝚍𝚘:
-${query}
-
-✰ ${BOT_NAME}`
-      )
-
+${BOT_NAME}`
+    )
 
     let videos = []
 
-
-    // ═════════════════════════════════
-    // ✰ YT-SEARCH
-    // ═════════════════════════════════
+    // ───────── YT-SEARCH ─────────
 
     try {
+      const result = await ytsearch(query)
 
-      const searchResult =
-        await ytsearch(
-          query
-        )
-
-
-      if (
-        searchResult?.videos?.length
-      ) {
-
-        videos =
-          searchResult.videos
-            .slice(
-              0,
-              10
-            )
-            .map(
-              v => ({
-
-                title:
-                  v.title ||
-                  'Sin título',
-
-                author:
-                  v.author?.name ||
-                  'Desconocido',
-
-                duration:
-                  v.timestamp ||
-                  'Desconocida',
-
-                views:
-                  Number(
-                    v.views || 0
-                  ).toLocaleString(),
-
-                publishedAt:
-                  v.ago ||
-                  'Desconocido',
-
-                videoId:
-                  v.videoId,
-
-                thumbnail:
-                  v.image,
-
-                url:
-                  v.url
-
-              })
-            )
-            .filter(
-              v =>
-                v.videoId &&
-                v.url
-            )
+      if (Array.isArray(result?.videos)) {
+        videos = result.videos.slice(0, 10).map(v => ({
+          title: clean(v.title, 'Sin título'),
+          author: clean(v.author?.name),
+          duration: clean(v.timestamp),
+          views: Number(v.views || 0).toLocaleString(),
+          publishedAt: clean(v.ago),
+          videoId: v.videoId,
+          thumbnail: v.image,
+          url: v.url
+        })).filter(v => v.videoId && v.url)
       }
-
-    } catch {}
-
-
-    // ═════════════════════════════════
-    // ✰ API SECUNDARIA
-    // ═════════════════════════════════
-
-    if (
-      !videos.length
-    ) {
-
-      try {
-
-        const {
-          data
-        } =
-          await axios.get(
-            LUXINFINITY,
-            {
-              params: {
-
-                query:
-                  query,
-
-                limit:
-                  10
-              },
-
-              timeout:
-                30000
-            }
-          )
-
-
-        if (
-          data?.status &&
-          Array.isArray(
-            data?.data
-          ) &&
-          data.data.length
-        ) {
-
-          videos =
-            data.data
-              .slice(
-                0,
-                10
-              )
-              .map(
-                v => ({
-
-                  title:
-                    v.title ||
-                    'Sin título',
-
-                  author:
-                    v.author?.name ||
-                    'Desconocido',
-
-                  duration:
-                    v.duration?.text ||
-                    v.duration?.timestamp ||
-                    'Desconocida',
-
-                  views:
-                    Number(
-                      v.views || 0
-                    ).toLocaleString(),
-
-                  publishedAt:
-                    v.publishDate ||
-                    'Desconocido',
-
-                  videoId:
-                    v.id ||
-                    v.videoId,
-
-                  thumbnail:
-                    v.thumb ||
-                    v.thumbnail ||
-                    v.image,
-
-                  url:
-                    v.url
-
-                })
-              )
-              .filter(
-                v =>
-                  v.videoId &&
-                  v.url
-              )
-        }
-
-      } catch {}
+    } catch (error) {
+      console.error('[PLAY] YT-SEARCH:', error.message)
     }
 
+    // ───────── API SECUNDARIA ─────────
 
-    // ═════════════════════════════════
-    // ✰ SIN RESULTADOS
-    // ═════════════════════════════════
+    if (!videos.length) {
+      try {
+        const { data } = await axios.get(LUXINFINITY, {
+          params: { query, limit: 10 },
+          timeout: 30000
+        })
 
-    if (
-      !videos.length
-    ) {
+        const list = Array.isArray(data?.data) ? data.data : []
 
-      await conn.sendMessage(
-        m.chat,
-        {
-          edit:
-            searchMsg.key,
+        videos = list.slice(0, 10).map(v => ({
+          title: clean(v.title, 'Sin título'),
+          author: clean(v.author?.name || v.author),
+          duration: clean(
+            v.duration?.text || v.duration?.timestamp || v.duration
+          ),
+          views: Number(v.views || 0).toLocaleString(),
+          publishedAt: clean(v.publishDate),
+          videoId: v.id || v.videoId,
+          thumbnail: v.thumb || v.thumbnail || v.image,
+          url: v.url
+        })).filter(v => v.videoId && v.url)
+      } catch (error) {
+        console.error('[PLAY] LUXINFINITY:', error.message)
+      }
+    }
 
-          text:
+    // ───────── VALIDAR RESULTADOS ─────────
 
-`༺ 𝚂𝙸𝙽 𝚁𝙴𝚂𝚄𝙻𝚃𝙰𝙳𝙾𝚂 ༻
+    if (!videos.length) {
+      await conn.sendMessage(m.chat, {
+        text:
+`${FRAME}
+*༺ 𝚂𝙸𝙽 𝚁𝙴𝚂𝚄𝙻𝚃𝙰𝙳𝙾𝚂 ༻*
 
-✰ 𝙽𝚘 𝚎𝚗𝚌𝚘𝚗𝚝𝚛é:
-${query}
+✰ No encontré: ${query}
 
-✰ ${BOT_NAME}`
-        }
-      ).catch(() => {})
+${BOT_NAME}`,
+        edit: searchMsg.key
+      }).catch(async () => {
+        await m.reply(`✰ No encontré resultados para: ${query}`)
+      })
 
+      await conn.sendMessage(m.chat, {
+        react: { text: '❌', key: m.key }
+      }).catch(() => {})
 
       return
     }
 
-
-    // ═════════════════════════════════
-    // ✰ GUARDAR RESULTADOS
-    // ═════════════════════════════════
-
-    global.youtubeCache[
-      m.sender
-    ] = {
-
-      query:
-        query,
-
-      index:
-        0,
-
-      results:
-        videos
+    global.youtubeCache[m.sender] = {
+      query,
+      index: 0,
+      results: videos
     }
 
+    await conn.sendMessage(m.chat, {
+      text:
+`${FRAME}
+*༺ 𝚁𝙴𝚂𝚄𝙻𝚃𝙰𝙳𝙾𝚂 𝙴𝙽𝙲𝙾𝙽𝚃𝚁𝙰𝙳𝙾𝚂 ༻*
 
-    // ═════════════════════════════════
-    // ✰ EDITAR MENSAJE
-    // ═════════════════════════════════
+✰ Resultados: ${videos.length}
+✰ Preparando tarjeta interactiva...
 
-    await conn.sendMessage(
-      m.chat,
-      {
-        edit:
-          searchMsg.key,
+${BOT_NAME}`,
+      edit: searchMsg.key
+    }).catch(() => {})
 
-        text:
+    await sendYoutubeCard(conn, m, videos, 0)
 
-`༺ 𝚁𝙴𝚂𝚄𝙻𝚃𝙰𝙳𝙾 ༻
+    await conn.sendMessage(m.chat, {
+      react: { text: '✅', key: m.key }
+    }).catch(() => {})
 
-✰ 𝙴𝚗𝚌𝚘𝚗𝚝𝚛𝚊𝚍𝚘𝚜:
-${videos.length}
+  } catch (error) {
+    console.error('[PLAY] ERROR:', error)
 
-✰ ${BOT_NAME}`
-      }
-    ).catch(() => {})
-
-
-    // ═════════════════════════════════
-    // ✰ MOSTRAR RESULTADO
-    // ═════════════════════════════════
-
-    await sendYoutubeCard(
-      conn,
-      m,
-      videos,
-      0,
-      usedPrefix
-    )
-
-
-    // ═════════════════════════════════
-    // ✰ REACCIÓN FINAL
-    // ═════════════════════════════════
-
-    await conn.sendMessage(
-      m.chat,
-      {
-        react: {
-          text: '✅',
-          key: m.key
-        }
-      }
-    ).catch(() => {})
-
-
-  } catch {
-
-    await conn.sendMessage(
-      m.chat,
-      {
-        react: {
-          text: '❌',
-          key: m.key
-        }
-      }
-    ).catch(() => {})
-
+    await conn.sendMessage(m.chat, {
+      react: { text: '❌', key: m.key }
+    }).catch(() => {})
 
     return m.reply(
+`${FRAME}
+*༺ 𝙴𝚁𝚁𝙾𝚁 𝙿𝙻𝙰𝚈 ༻*
 
-`༺ 𝙴𝚁𝚁𝙾𝚁 ༻
+✰ No se pudo completar la búsqueda.
+✰ Error: ${clean(error.message)}
 
-✰ 𝙽𝚘 𝚜𝚎 𝚙𝚞𝚍𝚘 𝚋𝚞𝚜𝚌𝚊𝚛.
-
-✰ 𝙸𝚗𝚝𝚎𝚗𝚝𝚊 𝚍𝚎 𝚗𝚞𝚎𝚟𝚘.
-
-✰ ${BOT_NAME}`
+${BOT_NAME}`
     )
   }
 }
 
-
 // ═══════════════════════════════════════
-// ✰ TARJETA YOUTUBE
+// ✰ TARJETA INTERACTIVA
 // ═══════════════════════════════════════
 
-async function sendYoutubeCard(
-  conn,
-  m,
-  results,
-  index,
-  usedPrefix
-) {
-
+async function sendYoutubeCard(conn, m, results, index) {
   const video = results[index]
 
   if (!video) {
-    return m.reply(
-`*༺ 𝚁𝙴𝚂𝚄𝙻𝚃𝙰𝙳𝙾 𝙸𝙽𝚅Á𝙻𝙸𝙳𝙾 ༻*
-
-✦ 𝙽𝚘 𝚎𝚡𝚒𝚜𝚝𝚎.
-
-✦ ${BOT_NAME}`
-    )
+    return m.reply('✰ No existe ese resultado.')
   }
 
-  // ═════════════════════════════════
-  // ✰ INFORMACIÓN COMPACTA
-  // ═════════════════════════════════
-
   const infoText =
-`*༺═──── ✦ ────═༻*
-*༻ 𝚈𝙾𝚄𝚃𝚄𝙱𝙴 ✦*
+`${FRAME}
+*༺ 𝚂𝙰𝙸𝚃𝙰𝙼𝙰𝙱𝙾𝚃 • 𝚈𝙾𝚄𝚃𝚄𝙱𝙴 ༻*
 
-*✦ 𝚃í𝚝𝚞𝚕𝚘:* *${video.title}*
-*✦ 𝙲𝚊𝚗𝚊𝚕:* *${video.author}*
-*✦ 𝙳𝚞𝚛𝚊𝚌𝚒ó𝚗:* *${video.duration}*  •  *𝚅𝚒𝚜𝚝𝚊𝚜:* *${video.views}*
-*✦ 𝙿𝚞𝚋𝚕𝚒𝚌𝚊𝚍𝚘:* *${video.publishedAt}*  •  *𝚁𝚎𝚜𝚞𝚕𝚝𝚊𝚍𝚘:* *${index + 1}/${results.length}*
+✰ *Título:* ${clean(video.title)}
+✰ *Canal:* ${clean(video.author)}
+✰ *Duración:* ${clean(video.duration)}
+✰ *Vistas:* ${clean(video.views)}
+✰ *Publicado:* ${clean(video.publishedAt)}
 
-*༺═──── ✦ ────═༻*
-*✦ 𝟮𝟬𝟮𝟲 • ֆǟɨ ✦*`
+✰ *Resultado:* ${index + 1}/${results.length}
 
-  // ═════════════════════════════════
-  // ✰ BOTONES
-  // ═════════════════════════════════
+${FRAME}
+✰ Selecciona una opción en el botón inferior.
 
-  const buttons = [
-    {
-      text: '༺ 𝑭𝑶𝑹𝑴𝑨𝑻𝑶 ༻',
+${BOT_NAME}`
 
-      sections: [
+  const selector = {
+    title: '✰ OPCIONES DE YOUTUBE',
+    sections: [
+      {
+        title: '✰ NAVEGACIÓN',
+        rows: [
+          {
+            title: 'Siguiente resultado',
+            description: `Ver resultado ${index + 2 > results.length ? 1 : index + 2}/${results.length}`,
+            id: 'playnext'
+          },
+          {
+            title: 'Abrir en YouTube',
+            description: 'Ver el contenido original',
+            id: `playurl ${video.videoId}`
+          }
+        ]
+      }
+    ]
+  }
 
-        {
-          title: '╭─〔 𝙰𝚄𝙳𝙸𝙾 〕─╮',
+  const buttons = [{
+    name: 'single_select',
+    buttonParamsJson: JSON.stringify(selector)
+  }]
 
-          rows: [
+  let header = {
+    title: '✰ SAITAMABOT • YOUTUBE',
+    hasMediaAttachment: false
+  }
 
-            {
-              title: '🎵 ❯ 𝙼𝙿𝟹',
+  try {
+    const media = await prepareWAMessageMedia(
+      { image: { url: getThumbnail(video) } },
+      { upload: conn.waUploadToServer }
+    )
 
-              description:
-                '✦ 𝙳𝚎𝚜𝚌𝚊𝚛𝚐𝚊𝚛 𝚊𝚞𝚍𝚒𝚘',
-
-              id:
-                `${usedPrefix}ytmp3 ${video.videoId}`
-            },
-
-            {
-              title: '📄 ❯ 𝙼𝙿𝟹 𝙳𝙾𝙲',
-
-              description:
-                '✦ 𝙰𝚞𝚍𝚒𝚘 𝚌𝚘𝚖𝚘 𝚍𝚘𝚌𝚞𝚖𝚎𝚗𝚝𝚘',
-
-              id:
-                `${usedPrefix}ytmp3doc ${video.videoId}`
-            }
-
-          ]
-        },
-
-        {
-          title: '╭─〔 𝚅𝙸𝙳𝙴𝙾 〕─╮',
-
-          rows: [
-
-            {
-              title: '🎬 ❯ 𝙼𝙿𝟺',
-
-              description:
-                '✦ 𝙳𝚎𝚜𝚌𝚊𝚛𝚐𝚊𝚛 𝚟í𝚍𝚎𝚘',
-
-              id:
-                `${usedPrefix}ytmp4 ${video.url}`
-            },
-
-            {
-              title: '📁 ❯ 𝙼𝙿𝟺 𝙳𝙾𝙲',
-
-              description:
-                '✦ 𝚅í𝚍𝚎𝚘 𝚌𝚘𝚖𝚘 𝚍𝚘𝚌𝚞𝚖𝚎𝚗𝚝𝚘',
-
-              id:
-                `${usedPrefix}ytmp4doc ${video.url}`
-            }
-
-          ]
-        },
-
-        {
-          title: '╭─〔 𝙱Ú𝚂𝚀𝚄𝙴𝙳𝙰 〕─╮',
-
-          rows: [
-
-            {
-              title: '➡️ ❯ 𝚂𝙸𝙶𝚄𝙸𝙴𝙽𝚃𝙴',
-
-              description:
-                `✦ ${
-                  index + 2 > results.length
-                    ? 1
-                    : index + 2
-                }/${results.length}`,
-
-              id:
-                `${usedPrefix}playnext`
-            }
-
-          ]
-        }
-
-      ]
+    if (media?.imageMessage) {
+      header = {
+        hasMediaAttachment: true,
+        imageMessage: media.imageMessage
+      }
     }
-  ]
+  } catch (error) {
+    console.error('[PLAY] MINIATURA:', error.message)
+  }
 
-  // ═════════════════════════════════
-  // ✰ MINIATURA
-  // ═════════════════════════════════
-
-  const thumbnail =
-    video.thumbnail ||
-    `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`
-
-  // ═════════════════════════════════
-  // ✰ ENVIAR
-  // ═════════════════════════════════
-
-  await conn.sendMessage(
+  const message = generateWAMessageFromContent(
     m.chat,
     {
-      image: {
-        url: thumbnail
-      },
-
-      caption: infoText,
-
-      footer: BOT_NAME,
-
-      buttons
+      viewOnceMessage: {
+        message: {
+          messageContextInfo: {
+            deviceListMetadata: {},
+            deviceListMetadataVersion: 2
+          },
+          interactiveMessage: {
+            body: { text: infoText },
+            footer: { text: BOT_NAME },
+            header,
+            nativeFlowMessage: { buttons }
+          }
+        }
+      }
     },
-    {
-      quoted: m
-    }
+    { quoted: m }
+  )
+
+  return conn.relayMessage(
+    m.chat,
+    message.message,
+    { messageId: message.key.id }
   )
 }
 
+// ═══════════════════════════════════════
+// ✰ RESPUESTAS DE BOTONES
+// ═══════════════════════════════════════
+
+handler.all = async function (m, { conn }) {
+  const responseId = String(m.responseId || '').trim()
+
+  if (!responseId.startsWith('playurl ')) return false
+
+  const videoId = responseId.slice('playurl '.length).trim()
+
+  if (!/^[\w-]{11}$/.test(videoId)) return false
+
+  await conn.sendMessage(m.chat, {
+    text:
+`${FRAME}
+*༺ 𝚈𝙾𝚄𝚃𝚄𝙱𝙴 • 𝙲𝙾𝙽𝚃𝙴𝙽𝙸𝙳𝙾 𝙾𝚁𝙸𝙶𝙸𝙽𝙰𝙻 ༻*
+
+https://www.youtube.com/watch?v=${videoId}
+
+${BOT_NAME}`,
+    quoted: m
+  })
+
+  return true
+}
 
 // ═══════════════════════════════════════
 // ✰ CONFIGURACIÓN
@@ -613,11 +339,7 @@ handler.help = [
   'playnext'
 ]
 
-
-handler.tags = [
-  'descargas'
-]
-
+handler.tags = ['descargas']
 
 handler.command = [
   'play',
@@ -626,8 +348,6 @@ handler.command = [
   'playnext'
 ]
 
-
 handler.register = false
-
 
 export default handler

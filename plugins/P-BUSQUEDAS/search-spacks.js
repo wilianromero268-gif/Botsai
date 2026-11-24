@@ -6,7 +6,7 @@ import sharp from 'sharp'
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const API_URL = 'https://www.sylphyy.xyz/search/stickerly'
-const API_KEY = 'sylph-d7ed7664'
+const API_KEY = process.env.SYLPH_API_KEY || 'sylph-d7ed7664'
 
 const MAX_RESULTS = 7
 const API_TIMEOUT = 30000
@@ -15,9 +15,20 @@ const MAX_IMAGE_SIZE = 8 * 1024 * 1024
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0',
-  ...(API_KEY && API_KEY !== 'PON_AQUI_TU_NUEVA_API_KEY'
+  ...(API_KEY && API_KEY !== 'PON_AQUI_TU_API_KEY'
     ? { 'X-API-Key': API_KEY }
     : {})
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ✰ REGISTRO DE ERRORES
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function logError(stage, error) {
+  console.error(
+    `[SPACKSSEARCH][${stage}]`,
+    error?.stack || error
+  )
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -27,9 +38,14 @@ const HEADERS = {
 async function react(conn, m, emoji) {
   try {
     await conn.sendMessage(m.chat, {
-      react: { text: emoji, key: m.key }
+      react: {
+        text: emoji,
+        key: m.key
+      }
     })
-  } catch {}
+  } catch (error) {
+    logError('REACTION', error)
+  }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -51,10 +67,25 @@ function normalizeSticker(item) {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ✰ VALIDAR URL
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function isValidUrl(value) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // ✰ BUSCAR STICKERLY
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function searchStickerly(query) {
+  console.log('[SPACKSSEARCH] Buscando:', query)
+
   const { data } = await axios.get(API_URL, {
     params: { q: query },
     headers: HEADERS,
@@ -69,9 +100,11 @@ async function searchStickerly(query) {
     .map(normalizeSticker)
     .filter(item =>
       /^https:\/\/sticker\.ly\/s\/[a-zA-Z0-9]+/.test(item.url) &&
-      /^https:\/\//.test(item.image)
+      isValidUrl(item.image)
     )
     .slice(0, MAX_RESULTS)
+
+  console.log('[SPACKSSEARCH] Resultados válidos:', results.length)
 
   if (!results.length) {
     throw new Error('No se encontraron paquetes válidos')
@@ -85,6 +118,10 @@ async function searchStickerly(query) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function prepareImage(url) {
+  if (!isValidUrl(url)) {
+    throw new Error('URL de miniatura inválida')
+  }
+
   const response = await axios.get(url, {
     responseType: 'arraybuffer',
     timeout: IMAGE_TIMEOUT,
@@ -102,7 +139,7 @@ async function prepareImage(url) {
     throw new Error('Miniatura vacía o demasiado grande')
   }
 
-  return await sharp(input, {
+  const output = await sharp(input, {
     failOn: 'error',
     limitInputPixels: 40000000
   })
@@ -113,9 +150,37 @@ async function prepareImage(url) {
       fit: 'inside',
       withoutEnlargement: true
     })
-    .flatten({ background: '#FFFFFF' })
-    .jpeg({ quality: 82, mozjpeg: true })
+    .flatten({
+      background: '#FFFFFF'
+    })
+    .jpeg({
+      quality: 82,
+      mozjpeg: true
+    })
     .toBuffer()
+
+  if (!Buffer.isBuffer(output) || !output.length) {
+    throw new Error('Sharp no generó una imagen válida')
+  }
+
+  return output
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ✰ FORMATEAR INFORMACIÓN
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function formatSticker(sticker) {
+  return [
+    `∆ *${sticker.name}* ∆`,
+    '',
+    `✰ Autor: ${sticker.author}`,
+    `✰ Stickers: ${sticker.stickerCount}`,
+    `✰ Vistas: ${sticker.views.toLocaleString('es-PE')}`,
+    `✰ Exportaciones: ${sticker.exports.toLocaleString('es-PE')}`,
+    `✰ Animados: ${sticker.animated ? 'Sí' : 'No'}`,
+    `✰ De pago: ${sticker.paid ? 'Sí' : 'No'}`
+  ].join('\n')
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -125,25 +190,23 @@ async function prepareImage(url) {
 async function createCards(results) {
   const cards = []
 
-  for (let index = 0; index < results.length; index++) {
-    const sticker = results[index]
-
+  for (const sticker of results) {
     try {
+      console.log(
+        '[SPACKSSEARCH] Preparando imagen:',
+        sticker.name
+      )
+
       const imageBuffer = await prepareImage(sticker.image)
+
+      const cardNumber = cards.length + 1
 
       cards.push({
         image: imageBuffer,
         mimetype: 'image/jpeg',
-        title: `#${index + 1}`,
 
-        caption: `∆ *${sticker.name}* ∆
-✰ Autor: ${sticker.author}
-✰ Stickers: ${sticker.stickerCount}
-✰ Vistas: ${sticker.views.toLocaleString('es-PE')}
-✰ Exportaciones: ${sticker.exports.toLocaleString('es-PE')}
-✰ Animados: ${sticker.animated ? 'Sí' : 'No'}
-✰ De pago: ${sticker.paid ? 'Sí' : 'No'}`,
-
+        title: `#${cardNumber}`,
+        caption: formatSticker(sticker),
         footer: 'SaitamaBot',
 
         nativeFlow: [
@@ -153,13 +216,20 @@ async function createCards(results) {
           }
         ]
       })
-    } catch (error) {
-      console.error(
-        `[SPACKSSEARCH] Imagen ${index + 1}:`,
-        error.message
+
+      console.log(
+        `[SPACKSSEARCH] Tarjeta ${cardNumber} preparada correctamente`
       )
+
+    } catch (error) {
+      logError(`IMAGE ${sticker.name}`, error)
     }
   }
+
+  console.log(
+    '[SPACKSSEARCH] Total de tarjetas preparadas:',
+    cards.length
+  )
 
   if (!cards.length) {
     throw new Error('No se pudo preparar ninguna miniatura')
@@ -172,16 +242,26 @@ async function createCards(results) {
 // ✰ HANDLER
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-let handler = async (m, { conn, text, usedPrefix, command }) => {
+let handler = async (m, {
+  conn,
+  text,
+  usedPrefix,
+  command
+}) => {
+
   if (!text?.trim()) {
     return conn.sendMessage(m.chat, {
-      text: `✰ *𝚂𝚃𝙸𝙲𝙺𝙴𝚁𝙻𝚈 𝚂𝙴𝙰𝚁𝙲𝙷*
-
-• Escribe el nombre del paquete.
-• Ejemplo: ${usedPrefix + command} Emma Myers
-
-SaitamaBot`
-    }, { quoted: m })
+      text: [
+        '✰ *𝚂𝚃𝙸𝙲𝙺𝙴𝚁𝙻𝚈 𝚂𝙴𝙰𝚁𝙲𝙷*',
+        '',
+        '• Escribe el nombre del paquete.',
+        `• Ejemplo: ${usedPrefix + command} Emma Myers`,
+        '',
+        'SaitamaBot'
+      ].join('\n')
+    }, {
+      quoted: m
+    })
   }
 
   const query = text.trim()
@@ -189,39 +269,81 @@ SaitamaBot`
   await react(conn, m, '🔎')
 
   try {
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ✰ BUSCAR RESULTADOS
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━
+
     const results = await searchStickerly(query)
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ✰ PREPARAR TARJETAS
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━
+
     const cards = await createCards(results)
 
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ✰ ENVIAR INFORMACIÓN
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━
+
     await conn.sendMessage(m.chat, {
-      text: `✰ *𝚂𝚃𝙸𝙲𝙺𝙴𝚁𝙻𝚈 𝚂𝙴𝙰𝚁𝙲𝙷*
+      text: [
+        '✰ *𝚂𝚃𝙸𝙲𝙺𝙴𝚁𝙻𝚈 𝚂𝙴𝙰𝚁𝙲𝙷*',
+        '',
+        `• Búsqueda: ${query}`,
+        `• Resultados: ${cards.length}`,
+        '• API: Sticker.ly',
+        '',
+        '༺═────── ✰ ──────═༻'
+      ].join('\n')
+    }, {
+      quoted: m
+    })
 
-• Búsqueda: ${query}
-• Resultados: ${cards.length}
-• API: Sticker.ly
+    console.log(
+      '[SPACKSSEARCH] Enviando carrusel:',
+      cards.length,
+      'tarjetas'
+    )
 
-༺═────── ✰ ──────═༻`,
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ✰ ENVIAR CARRUSEL NATIVO
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    const sent = await conn.sendMessage(m.chat, {
       footer: 'SaitamaBot',
       cards
-    }, { quoted: m })
+    }, {
+      quoted: m
+    })
+
+    console.log(
+      '[SPACKSSEARCH] Carrusel enviado. ID:',
+      sent?.key?.id || 'No disponible'
+    )
 
     await react(conn, m, '✅')
 
   } catch (error) {
-    console.error(
-      '[SPACKSSEARCH] Error:',
-      error?.stack || error
-    )
+    logError('HANDLER', error)
 
     await react(conn, m, '❌')
 
-    await conn.sendMessage(m.chat, {
-      text: `༺ ✰ 𝙴𝚁𝚁𝙾𝚁 𝚂𝙿𝙰𝙲𝙺𝚂 ✰ ༻
-
-• No se pudo enviar la búsqueda.
-• Error: ${error.message}
-
-SaitamaBot`
-    }, { quoted: m })
+    try {
+      await conn.sendMessage(m.chat, {
+        text: [
+          '༺ ✰ 𝙴𝚁𝚁𝙾𝚁 𝚂𝙿𝙰𝙲𝙺𝚂 ✰ ༻',
+          '',
+          '• No se pudo completar la búsqueda.',
+          `• Error: ${error.message || 'Error desconocido'}`,
+          '',
+          'SaitamaBot'
+        ].join('\n')
+      }, {
+        quoted: m
+      })
+    } catch (sendError) {
+      logError('ERROR MESSAGE', sendError)
+    }
   }
 }
 
@@ -231,7 +353,13 @@ SaitamaBot`
 
 handler.help = ['spacks <texto>']
 handler.tags = ['busqueda']
-handler.command = ['spacks', 'spackssearch']
+
+handler.command = [
+  'spacks',
+  'spackssearch',
+  'buscarstickers'
+]
+
 handler.register = false
 
 export default handler

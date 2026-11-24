@@ -180,13 +180,14 @@ async function startBot() {
   ======================================================= */
 
   const conn = makeWASocket({
+    browser: ["Ubuntu", "Chrome", "20.0.04"],
     version,
     logger,
 
     printQRInTerminal:
       !config.usePairingCode,
 
-    browser: Browsers.ubuntu('Chrome'),
+
 
     keepAliveIntervalMs: 60000,
     connectTimeoutMs: 60000,
@@ -276,70 +277,30 @@ async function startBot() {
      PAIRING CODE
   ======================================================= */
 
+  let pairingNumber = null
+
   if (
     config.usePairingCode &&
     !conn.authState.creds.registered
   ) {
-    let numero =
-      config.phoneNumber?.replace(
-        /\D/g,
-        ''
-      )
+    pairingNumber = config.phoneNumber?.replace(/\D/g, '')
 
-    if (!numero) {
-      const rl =
-        readline.createInterface({
-          input: process.stdin,
-          output: process.stdout
-        })
+    if (!pairingNumber) {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      })
 
-      numero = await new Promise(resolve => {
+      pairingNumber = await new Promise(resolve => {
         rl.question(
-          chalk.bold.yellowBright(
-            '\nINGRESA TU NÚMERO DE TELÉFONO (sin +): '
-          ),
+          '\nINGRESA TU NÚMERO DE TELÉFONO (sin +): ',
           answer => {
             rl.close()
-            resolve(
-              answer.replace(/\D/g, '')
-            )
+            resolve(answer.replace(/\D/g, ''))
           }
         )
       })
     }
-
-    setTimeout(async () => {
-      try {
-        const raw =
-          await conn.requestPairingCode(
-            numero
-          )
-
-        const code =
-          raw
-            ?.match(/.{1,4}/g)
-            ?.join('-') ?? raw
-
-        console.log(
-          `\n${chalk.bold.yellowBright(
-            'CÓDIGO:'
-          )} ${chalk.bold.bgGreen.white(
-            ` ${code} `
-          )}\n`
-        )
-      } catch (e) {
-        console.error(
-          chalk.bold.bgRed.white(
-            ' [PAIRING ERROR] '
-          ),
-          chalk.bold.redBright(
-            e?.message || e
-          )
-        )
-
-        process.exit(1)
-      }
-    }, 3000)
   }
 
   /* =======================================================
@@ -350,6 +311,42 @@ async function startBot() {
     'creds.update',
     saveCreds
   )
+
+  /* =======================================================
+     SOLICITAR PAIRING CODE
+  ======================================================= */
+
+  if (
+    config.usePairingCode &&
+    pairingNumber &&
+    !conn.authState.creds.registered
+  ) {
+    let pairingRequested = false
+
+    conn.ev.on('connection.update', async ({ qr }) => {
+      if (
+        !qr ||
+        pairingRequested ||
+        conn.authState.creds.registered
+      ) return
+
+      pairingRequested = true
+
+      try {
+        await new Promise(resolve => setTimeout(resolve, 1500))
+
+        const raw = await conn.requestPairingCode(pairingNumber)
+
+        const formatted = raw?.match(/.{1,4}/g)?.join('-') ?? raw
+
+        console.log('\nCÓDIGO DE VINCULACIÓN:', formatted, '\n')
+      } catch (error) {
+        pairingRequested = false
+        console.error('[PAIRING ERROR]', error?.message || error)
+      }
+    })
+  }
+
 
   /* =======================================================
      CONEXIÓN
@@ -363,6 +360,19 @@ async function startBot() {
     }) => {
 
       if (connection === 'close') {
+        const err = lastDisconnect?.error
+
+        console.log('\n===== WHATSAPP DISCONNECT DETAIL =====')
+        console.log(JSON.stringify({
+          name: err?.name,
+          message: err?.message,
+          statusCode: err?.output?.statusCode,
+          payloadMessage: err?.output?.payload?.message,
+          payloadError: err?.output?.payload?.error,
+          registered: conn.authState.creds.registered
+        }, null, 2))
+        console.log('===== END DISCONNECT DETAIL =====\n')
+
         const code =
           lastDisconnect
             ?.error
@@ -376,6 +386,15 @@ async function startBot() {
             DisconnectReason.loggedOut ||
           code === 401
         ) {
+          if (!conn.authState.creds.registered) {
+            console.log('[PAIRING] WhatsApp cerró la conexión antes de completar la vinculación. Se conserva la sesión para investigar.')
+            conn.ev.removeAllListeners()
+            try {
+              conn.ws.close()
+            } catch {}
+            return
+          }
+
           conn.ev.removeAllListeners()
 
           try {

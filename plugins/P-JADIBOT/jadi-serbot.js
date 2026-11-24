@@ -176,7 +176,8 @@ handler.command = [
   'serbot',
   'jadibot',
   'subbot',
-  'code'
+  'code',
+  'botser'
 ]
 
 handler.noRegister = true
